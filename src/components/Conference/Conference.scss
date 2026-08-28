@@ -1,0 +1,47 @@
+.Conference {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+
+  /* BoxHeader from @pexip/components */
+  [class*="BoxHeader"], [class*="box-header"] {
+    padding: 14px 18px !important;
+    border-bottom: 1px solid var(--border) !important;
+    background: var(--surface) !important;
+
+    h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0;
+    }
+  }
+
+  .Separator {
+    width: calc(100% - 36px);
+    margin: 0 18px;
+    height: 1px;
+    border: none;
+    background: var(--border);
+  }
+
+  .Container {
+    display: flex;
+    flex-direction: column;
+    padding: 14px 18px;
+    gap: 12px;
+
+    .TogglesContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+
+      .Toggle {
+        width: 100%;
+      }
+    }
+  }
+}

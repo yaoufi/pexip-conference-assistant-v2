@@ -1,0 +1,27 @@
+.PinDialog {
+  display: flex;
+  width: 380px;
+
+  .CloseButton {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .Subtitle {
+    color: #666;
+    margin: 4px 0 0;
+  }
+
+  .InputContainer {
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+  }
+
+  .ButtonContainer {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+}

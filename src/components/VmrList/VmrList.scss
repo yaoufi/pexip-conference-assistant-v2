@@ -1,0 +1,305 @@
+  .VmrList {
+    background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    &::-webkit-scrollbar { width: 4px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+    &__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    &__title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    &__title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.35);
+    }
+
+    &__count {
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.5);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    &__empty {
+      padding: 48px 24px;
+      text-align: center;
+      color: rgba(255,255,255,0.3);
+      font-size: 13px;
+    }
+
+    &__toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      flex-wrap: wrap;
+    }
+
+    &__search {
+      flex: 1;
+      min-width: 140px;
+      padding: 6px 11px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-family: inherit;
+      color: #f1f5f9;
+      background: rgba(255,255,255,0.06);
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+
+      &:focus {
+        border-color: rgba(99,102,241,0.5);
+        background: rgba(255,255,255,0.09);
+      }
+
+      &::placeholder { color: rgba(255,255,255,0.25); }
+    }
+
+    &__sort {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    &__sort-btn {
+      font-size: 11px;
+      padding: 5px 10px;
+      background: transparent;
+      color: rgba(255,255,255,0.35);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      font-family: inherit;
+      font-weight: 500;
+
+      &:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); }
+
+      &.active {
+        background: rgba(99,102,241,0.2);
+        border-color: rgba(99,102,241,0.4);
+        color: #c7d2fe;
+      }
+    }
+  }
+
+  /* -- VMR Card -- */
+  .VmrCard {
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+
+    &:last-child { border-bottom: none; }
+
+    &__row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      gap: 14px;
+      transition: background 0.12s;
+      cursor: default;
+
+      &:hover { background: rgba(255,255,255,0.03); }
+    }
+
+    &__left {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    &__name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    &__name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &__meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    &__alias {
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+    }
+
+    &__stat {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+    }
+
+    &__right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    &__preview-pane {
+      border-top: 1px solid rgba(255,255,255,0.06);
+      background: #0f172a;
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: 320px;
+        border: none;
+      }
+    }
+
+    &__quality-pane {
+      border-top: 1px solid rgba(255,255,255,0.06);
+      background: #0a1628;
+      padding: 12px 16px;
+      overflow-x: auto;
+    }
+  }
+
+  .QualityPane__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .QualityPane__title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* -- Quality table -- */
+  .QualityTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+
+    th {
+      text-align: left;
+      padding: 6px 10px;
+      color: rgba(255,255,255,0.35);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 7px 10px;
+      color: rgba(255,255,255,0.75);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      white-space: nowrap;
+
+      &.stat--poor { color: #fca5a5; }
+      &.stat--fair { color: #fcd34d; }
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+  }
+
+  .QualityDot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+
+    &--good    { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+    &--fair    { background: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.5); }
+    &--poor    { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.5); }
+    &--unknown { background: rgba(255,255,255,0.3); }
+  }
+
+  .QualityPanel__empty {
+    color: rgba(255,255,255,0.35);
+    font-size: 12px;
+    padding: 16px 0;
+    text-align: center;
+  }
+
+  /* -- Dark badges -- */
+  .VmrList, .VmrCard {
+    .Badge {
+      &--new     { background: rgba(59,130,246,0.25);  color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+      &--locked  { background: rgba(245,158,11,0.2);   color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+      &--muted   { background: rgba(239,68,68,0.2);    color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+      &--conf    { background: rgba(34,197,94,0.15);   color: #86efac; border: 1px solid rgba(34,197,94,0.2); }
+      &--other   { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.45); border: 1px solid rgba(255,255,255,0.1); }
+    }
+  }
+
+  /* -- Lock / unlock buttons -- */
+  .Btn--lock {
+    background: rgba(34,197,94,0.15);
+    color: #86efac;
+    border: 1px solid rgba(34,197,94,0.3);
+    &:hover { background: rgba(34,197,94,0.25); }
+  }
+
+  .Btn--unlock {
+    background: rgba(239,68,68,0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239,68,68,0.3);
+    &:hover { background: rgba(239,68,68,0.25); }
+  }
+
+  /* -- Preview / Sign out buttons (dark theme) -- */
+  .VmrCard__right, .VmrList__header {
+    .Btn--ghost {
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.6);
+      border-color: rgba(255,255,255,0.12);
+      &:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; }
+      &.active {
+        background: rgba(99,102,241,0.2);
+        border-color: rgba(99,102,241,0.4);
+        color: #c7d2fe;
+      }
+    }
+  }

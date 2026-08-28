@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  pexip-assistant-v2:
+    build: .
+    container_name: pexip-assistant-v2-app
+    ports:
+      - "127.0.0.1:3002:80"
+    restart: always
+    mem_limit: 512m
+    cpus: '1.0'

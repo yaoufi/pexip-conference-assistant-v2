@@ -1,0 +1,32 @@
+.Participants {
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+
+  .Container {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.5em;
+  }
+
+  .TableBodyCell, .TableHeadCell {
+    justify-content: center;
+    white-space: nowrap;
+
+    .OverlayText > label:first-child {
+      display: none;
+    }
+  }
+
+  .ActionsCell {
+    min-width: 160px;
+    max-width: 160px;
+  }
+}

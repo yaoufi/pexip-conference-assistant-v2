@@ -1,0 +1,73 @@
+.AppHeader {
+  height: 56px;
+  background: var(--sidebar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  &__logo {
+    height: 26px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+  }
+
+  &__title {
+    color: var(--sidebar-text);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    opacity: 0.9;
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--sidebar-text);
+    border-radius: var(--radius);
+    padding: 6px 13px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    opacity: 0.85;
+
+    &:hover {
+      background: rgba(255,255,255,0.14);
+      opacity: 1;
+    }
+
+    svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+
+    &--danger {
+      color: #fca5a5;
+      border-color: rgba(252,165,165,0.2);
+
+      &:hover {
+        background: rgba(239,68,68,0.18);
+      }
+    }
+  }
+}

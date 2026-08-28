@@ -1,0 +1,21 @@
+.TextInputDialog {
+  display: flex;
+  width: 420px;
+
+  .CloseButton {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .InputContainer {
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+  }
+
+  .ButtonContainer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+}
