@@ -13,7 +13,6 @@ export const Settings = (props: SettingsProps): JSX.Element => {
   const [adminUser, setAdminUser] = useState('')
   const [adminPass, setAdminPass] = useState('')
   const [displayName, setDisplayName] = useState('')
-
   useEffect(() => {
     setMgmtNode(localStorage.getItem(mgmtNodeKey) ?? '')
     setAdminUser(localStorage.getItem(adminUserKey) ?? '')

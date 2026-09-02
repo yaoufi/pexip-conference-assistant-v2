@@ -6,6 +6,24 @@ services:
     container_name: pexip-assistant-v2-app
     ports:
       - "127.0.0.1:3002:80"
+    environment:
+      - MTX_HOST=mediamtx
+    depends_on:
+      - mediamtx
+    restart: always
+    mem_limit: 512m
+    cpus: '1.0'
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    ports:
+      - "1935:1935"
+      - "8888:8888"
+      - "8889:8889"
+      - "8189:8189/udp"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
     restart: always
     mem_limit: 512m
     cpus: '1.0'

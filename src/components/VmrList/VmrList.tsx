@@ -26,6 +26,7 @@
     onLogout: () => void
     confNode?: string | null
     onFetchQuality?: (confName: string) => Promise<ParticipantMediaData[]>
+    onVideoWall?: () => void
   }
 
   const startMs = (vmr: Vmr): number => {
@@ -131,7 +132,7 @@
     )
   }
 
-  export const VmrList = ({ vmrs, onSelect, onToggleLock, onLogout, confNode, onFetchQuality }: VmrListProps): JSX.Element => {
+  export const VmrList = ({ vmrs, onSelect, onToggleLock, onLogout, confNode, onFetchQuality, onVideoWall }: VmrListProps): JSX.Element => {
     const [previewState, setPreviewState] = useState<{ vmrId: string; pin: string } | null>(null)
     const [qualityVmrId, setQualityVmrId] = useState<string | null>(null)
     const [qualityData, setQualityData] = useState<Record<string, ParticipantMediaData[]>>({})
@@ -198,6 +199,9 @@
               <span className="VmrList__title">Active Conferences</span>
               <span className="VmrList__count">{vmrs.length}</span>
             </div>
+            {onVideoWall && (
+              <button className="Btn Btn--ghost" onClick={onVideoWall}>Video Wall</button>
+            )}
             <button className="Btn Btn--ghost" onClick={onLogout}>Sign Out</button>
           </div>
 

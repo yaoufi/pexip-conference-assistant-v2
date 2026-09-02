@@ -4,11 +4,13 @@ import './Header.scss'
 interface HeaderProps {
   isConnected: boolean
   showSettings: boolean
+  showSetup?: boolean
   onDisconnectClick: () => void
   onSettingsClick: () => void
+  onSetupClick?: () => void
 }
 
-export const Header = ({ isConnected, showSettings, onDisconnectClick, onSettingsClick }: HeaderProps): JSX.Element => {
+export const Header = ({ isConnected, showSettings, showSetup, onDisconnectClick, onSettingsClick, onSetupClick }: HeaderProps): JSX.Element => {
   return (
     <header className="AppHeader">
       <div className="AppHeader__left">
@@ -20,6 +22,12 @@ export const Header = ({ isConnected, showSettings, onDisconnectClick, onSetting
           <button className="AppHeader__btn AppHeader__btn--danger" onClick={onDisconnectClick}>
             <Icon source={IconTypes.IconLeave} />
             Disconnect
+          </button>
+        )}
+        {showSetup && onSetupClick && (
+          <button className="AppHeader__btn" onClick={onSetupClick}>
+            <Icon source={IconTypes.IconSettings} />
+            OIDC Setup
           </button>
         )}
         {showSettings && (

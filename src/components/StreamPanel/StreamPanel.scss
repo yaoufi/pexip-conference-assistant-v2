@@ -1,0 +1,77 @@
+.StreamPlayer {
+  margin-top: 8px;
+  background: #111;
+  border-radius: 8px;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #1a1a2e;
+  }
+
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ccc;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+
+    &--live {
+      background: #e53935;
+      box-shadow: 0 0 6px #e53935;
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    &--connecting {
+      background: #ffa726;
+      animation: pulse-dot 1s infinite;
+    }
+
+    &--waiting {
+      background: #888;
+    }
+
+    &--error {
+      background: #e53935;
+    }
+  }
+
+  &__close {
+    padding: 4px 12px;
+    font-size: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: transparent;
+    color: #e53935;
+    cursor: pointer;
+    font-weight: 500;
+
+    &:hover {
+      background: rgba(229, 57, 53, 0.15);
+    }
+  }
+
+  &__video {
+    width: 100%;
+    display: block;
+    max-height: 360px;
+    background: #000;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

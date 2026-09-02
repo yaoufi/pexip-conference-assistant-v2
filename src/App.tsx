@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
   import { PinDialog } from './components/PinDialog/PinDialog'
   import { BrandPanel } from './components/BrandPanel/BrandPanel'
   import type { PlatformStats, NodeLoad, ParticipantMediaData } from './types'
-  import { adminPassKey, adminUserKey, conferenceKey, directNodeKey, directVmrKey, displayNameKey, hostPinKey, mgmtNodeKey, nodeKey } from './constants'
+  import { adminPassKey, adminUserKey, conferenceKey, directNodeKey, directVmrKey, displayNameKey, hostPinKey, mgmtNodeKey, nodeKey, authMethodKey } from './constants'
   import {
     ClientCallType,
     type InfinityClient,
@@ -27,6 +27,8 @@ import { useEffect, useRef, useState } from 'react'
 
   import './App.scss'
   import { ErrorPanel } from './components/ErrorPanel/ErrorPanel'
+  import { VideoWall } from './components/VideoWall/VideoWall'
+  import { SetupPage } from './components/SetupPage/SetupPage'
 
   enum AppMode {
     None,
@@ -86,6 +88,60 @@ import { useEffect, useRef, useState } from 'react'
     const nodeIpToHostname = useRef<Map<string, string>>(new Map())
     const seenVmrIds = useRef<Set<string>>(new Set())
     const newVmrTimestamps = useRef<Map<string, number>>(new Map())
+    const [showVideoWall, setShowVideoWall] = useState(false)
+    const [authMethod, setAuthMethod] = useState<'basic' | 'oidc'>(() => (localStorage.getItem(authMethodKey) as any) ?? 'basic')
+    const [oidcUser, setOidcUser] = useState<{ name: string; email: string } | null>(null)
+    const [oidcAvailable, setOidcAvailable] = useState(false)
+    const [oidcMgrNode, setOidcMgrNode] = useState('')
+    const [authError, setAuthError] = useState('')
+    const [showSetupPage, setShowSetupPage] = useState(false)
+    const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
+
+    const getAuthHeaders = (): Record<string, string> => {
+      if (authMethod === 'oidc') return {}
+      const u = localStorage.getItem(adminUserKey) ?? ''
+      const p = localStorage.getItem(adminPassKey) ?? ''
+      return u ? { 'Authorization': `Basic ${btoa(`${u}:${p}`)}` } : {}
+    }
+
+    const getMgmtNode = (): string => {
+      if (authMethod === 'oidc') return oidcMgrNode
+      return localStorage.getItem(mgmtNodeKey) ?? ''
+    }
+
+    useEffect(() => {
+      const params = new URLSearchParams(window.location.search)
+      const err = params.get('auth_error')
+      if (err) {
+        setAuthError(err)
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+
+      fetch(`${API_BASE}/admin/status`).then(r => r.json()).then(status => {
+        setNeedsSetup(!status.configured)
+      }).catch(() => setNeedsSetup(false))
+
+      fetch(`${API_BASE}/auth/config`).then(r => r.json()).then(cfg => {
+        setOidcAvailable(cfg.oidcEnabled)
+        if (cfg.pexipMgrNode) setOidcMgrNode(cfg.pexipMgrNode)
+      }).catch(() => {})
+
+      fetch(`${API_BASE}/auth/me`).then(r => r.json()).then(data => {
+        if (data.authenticated && data.user) {
+          setOidcUser(data.user)
+          setAuthMethod('oidc')
+          localStorage.setItem(authMethodKey, 'oidc')
+        }
+      }).catch(() => {})
+    }, [])
+
+    useEffect(() => {
+      if (oidcUser && oidcMgrNode && appState === AppState.Disconnected) {
+        setAppMode(AppMode.Management)
+        appModeRef.current = AppMode.Management
+        authenticate().catch(console.error)
+      }
+    }, [oidcUser, oidcMgrNode])
 
     useEffect(() => {
       const disconnectBrowserClosed = (): void => {
@@ -166,7 +222,7 @@ import { useEffect, useRef, useState } from 'react'
     }
 
     const fetchVmrs = async (mgmtNode: string, adminUser: string, adminPass: string): Promise<void> => {
-      const headers = { 'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}` }
+      const headers = authMethod === 'oidc' ? {} : { 'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}` }
       try {
         const [confRes, partRes] = await Promise.all([
           fetch(`${API_BASE}/bridge`, { headers: { ...headers, 'x-pexip-url': `https://${mgmtNode}/api/admin/status/v1/conference/?limit=500` } }),
@@ -289,10 +345,10 @@ import { useEffect, useRef, useState } from 'react'
     }
 
     const fetchQuality = async (confName: string): Promise<ParticipantMediaData[]> => {
-      const mgmtNode = localStorage.getItem(mgmtNodeKey) ?? ''
+      const mgmtNode = getMgmtNode()
       const adminUser = localStorage.getItem(adminUserKey) ?? ''
       const adminPass = localStorage.getItem(adminPassKey) ?? ''
-      const headers = { 'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}` }
+      const headers = getAuthHeaders()
       const participants = confParticipantsRef.current[confName] ?? []
       const results = await Promise.all(
         participants.map(async (p) => {
@@ -312,30 +368,35 @@ import { useEffect, useRef, useState } from 'react'
     }
 
     const authenticate = async (): Promise<void> => {
-      const mgmtNode = localStorage.getItem(mgmtNodeKey)
-      const adminUser = localStorage.getItem(adminUserKey)
-      const adminPass = localStorage.getItem(adminPassKey)
+      const mgmtNode = authMethod === 'oidc' ? oidcMgrNode : localStorage.getItem(mgmtNodeKey)
+      const adminUser = localStorage.getItem(adminUserKey) ?? ''
+      const adminPass = localStorage.getItem(adminPassKey) ?? ''
 
-      if (mgmtNode == null || adminUser == null || adminPass == null) {
-        alert('Please configure the management node credentials in Settings first.')
+      if (!mgmtNode) {
+        if (authMethod === 'oidc') {
+          setError('Server not configured with a Pexip management node. Set PEXIP_MGR_NODE on the server.')
+        } else {
+          alert('Please configure the management node credentials in Settings first.')
+        }
         return
       }
 
+      const headers = getAuthHeaders()
       setAppState(AppState.Connecting)
 
       try {
         const response = await fetch(`${API_BASE}/bridge`, {
           headers: {
+            ...headers,
             'x-pexip-url': `https://${mgmtNode}/api/admin/configuration/v1/licence/`,
-            'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}`
           }
         })
 
         if (response.status === 200) {
           const nodeRes = await fetch(`${API_BASE}/bridge`, {
             headers: {
+              ...headers,
               'x-pexip-url': `https://${mgmtNode}/api/admin/configuration/v1/worker_vm/?limit=50`,
-              'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}`
             }
           })
           if (nodeRes.ok) {
@@ -357,8 +418,8 @@ import { useEffect, useRef, useState } from 'react'
           try {
             const aliasRes = await fetch(`${API_BASE}/bridge`, {
               headers: {
+                ...headers,
                 'x-pexip-url': `https://${mgmtNode}/api/admin/configuration/v1/conference/?limit=500`,
-                'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}`
               }
             })
             if (aliasRes.ok) {
@@ -372,7 +433,7 @@ import { useEffect, useRef, useState } from 'react'
               }
               vmrAliasMap.current = map
             }
-          } catch { /* non-fatal � fall back to using name as alias */ }
+          } catch { /* non-fatal */ }
 
           setAppState(AppState.Authenticated)
           startPolling(mgmtNode, adminUser, adminPass)
@@ -491,6 +552,12 @@ import { useEffect, useRef, useState } from 'react'
       Object.keys(localStorage)
         .filter(k => k.startsWith('pex-pin-'))
         .forEach(k => localStorage.removeItem(k))
+      if (authMethod === 'oidc') {
+        fetch(`${API_BASE}/auth/logout`, { method: 'POST' }).catch(() => {})
+        setOidcUser(null)
+        localStorage.removeItem(authMethodKey)
+      }
+      setAppMode(AppMode.None)
       setAppState(AppState.Disconnected)
     }
 
@@ -501,6 +568,8 @@ import { useEffect, useRef, useState } from 'react'
           <Header
             isConnected={appState === AppState.Connected}
             showSettings={appState !== AppState.Disconnected && appMode === AppMode.Management}
+            showSetup={appState === AppState.Authenticated || (appState === AppState.Disconnected && authMethod === 'oidc' && !!oidcUser)}
+            onSetupClick={() => setShowSetupPage(true)}
             onDisconnectClick={() => {
               infinityClient?.disconnect({}).catch((e) => {
                 console.error(e)
@@ -548,11 +617,33 @@ import { useEffect, useRef, useState } from 'react'
               <div className="LoginScreen">
                 <div className="LoginCard">
                   <h2>Management Node</h2>
-                  <p>Enter your Pexip management node credentials to get started.</p>
+                  {authError && (
+                    <div className="LoginForm__error">{authError}</div>
+                  )}
+
+                  {oidcAvailable && (
+                    <div className="LoginForm__oidc">
+                      <p>Sign in with your organization account</p>
+                      <button
+                        className="Btn Btn--primary LoginForm__submit"
+                        onClick={() => {
+                          window.location.href = `${API_BASE}/auth/login`
+                        }}
+                      >
+                        Sign in with SSO
+                      </button>
+                      <div className="LoginForm__divider">
+                        <span>or use admin credentials</span>
+                      </div>
+                    </div>
+                  )}
+
                   <form
                     className="LoginForm"
                     onSubmit={(e) => {
                       e.preventDefault()
+                      setAuthMethod('basic')
+                      localStorage.setItem(authMethodKey, 'basic')
                       localStorage.setItem(mgmtNodeKey, loginMgmtNode.trim())
                       localStorage.setItem(adminUserKey, loginAdminUser.trim())
                       localStorage.setItem(adminPassKey, loginAdminPass)
@@ -694,7 +785,7 @@ import { useEffect, useRef, useState } from 'react'
               </div>
             )}
 
-            {appState === AppState.Authenticated && (
+            {appState === AppState.Authenticated && !showVideoWall && (
               <div className="AuthLayout">
                 <VmrList
                   vmrs={vmrs}
@@ -711,6 +802,7 @@ import { useEffect, useRef, useState } from 'react'
                   }}
                   onToggleLock={(vmr) => { void toggleLockVmr(vmr) }}
                   onLogout={logout}
+                  onVideoWall={() => setShowVideoWall(true)}
                 />
                 <BrandPanel
                   vmrCount={vmrs.length}
@@ -718,6 +810,14 @@ import { useEffect, useRef, useState } from 'react'
                   stats={platformStats}
                 />
               </div>
+            )}
+
+            {appState === AppState.Authenticated && showVideoWall && (
+              <VideoWall
+                vmrs={vmrs}
+                confNode={confNode}
+                onBack={() => setShowVideoWall(false)}
+              />
             )}
 
             {pendingVmr != null && (
@@ -771,6 +871,22 @@ import { useEffect, useRef, useState } from 'react'
               <Settings onClose={() => { setSettingsOpened(false) }} />
             )}
           </div>
+
+          {showSetupPage && (
+            <SetupPage
+              isFirstRun={!!needsSetup}
+              authHeaders={getAuthHeaders()}
+              onConfigSaved={() => {
+                setShowSetupPage(false)
+                setNeedsSetup(false)
+                fetch(`${API_BASE}/auth/config`).then(r => r.json()).then(cfg => {
+                  setOidcAvailable(cfg.oidcEnabled)
+                  if (cfg.pexipMgrNode) setOidcMgrNode(cfg.pexipMgrNode)
+                }).catch(() => {})
+              }}
+              onClose={() => setShowSetupPage(false)}
+            />
+          )}
         </ThemeProvider>
       </div>
     )
