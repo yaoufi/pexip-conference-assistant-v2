@@ -568,7 +568,7 @@ import { useEffect, useRef, useState } from 'react'
           <Header
             isConnected={appState === AppState.Connected}
             showSettings={appState !== AppState.Disconnected && appMode === AppMode.Management}
-            showSetup={appState === AppState.Authenticated || (appState === AppState.Disconnected && authMethod === 'oidc' && !!oidcUser)}
+            showSetup={true}
             onSetupClick={() => setShowSetupPage(true)}
             onDisconnectClick={() => {
               infinityClient?.disconnect({}).catch((e) => {

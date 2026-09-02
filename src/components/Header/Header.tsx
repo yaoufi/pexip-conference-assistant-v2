@@ -26,7 +26,7 @@ export const Header = ({ isConnected, showSettings, showSetup, onDisconnectClick
         )}
         {showSetup && onSetupClick && (
           <button className="AppHeader__btn" onClick={onSetupClick}>
-            <Icon source={IconTypes.IconSettings} />
+            <Icon source={IconTypes.IconAuthenticated} />
             OIDC Setup
           </button>
         )}
