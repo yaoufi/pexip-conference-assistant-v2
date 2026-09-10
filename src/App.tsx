@@ -65,7 +65,7 @@ import { useEffect, useRef, useState } from 'react'
     const [error, setError] = useState('')
     const [loginMgmtNode, setLoginMgmtNode] = useState(() => localStorage.getItem(mgmtNodeKey) ?? '')
     const [loginAdminUser, setLoginAdminUser] = useState(() => localStorage.getItem(adminUserKey) ?? '')
-    const [loginAdminPass, setLoginAdminPass] = useState(() => localStorage.getItem(adminPassKey) ?? '')
+    const [loginAdminPass, setLoginAdminPass] = useState('')
     const [loginDisplayName, setLoginDisplayName] = useState(() => localStorage.getItem(displayNameKey) ?? '')
     const [directNode, setDirectNode] = useState(() => localStorage.getItem(directNodeKey) ?? '')
     const [directVmr, setDirectVmr] = useState(() => localStorage.getItem(directVmrKey) ?? '')
@@ -98,10 +98,7 @@ import { useEffect, useRef, useState } from 'react'
     const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
 
     const getAuthHeaders = (): Record<string, string> => {
-      if (authMethod === 'oidc') return {}
-      const u = localStorage.getItem(adminUserKey) ?? ''
-      const p = localStorage.getItem(adminPassKey) ?? ''
-      return u ? { 'Authorization': `Basic ${btoa(`${u}:${p}`)}` } : {}
+      return {}
     }
 
     const getMgmtNode = (): string => {
@@ -110,6 +107,8 @@ import { useEffect, useRef, useState } from 'react'
     }
 
     useEffect(() => {
+      localStorage.removeItem(adminPassKey)
+
       const params = new URLSearchParams(window.location.search)
       const err = params.get('auth_error')
       if (err) {
@@ -128,9 +127,19 @@ import { useEffect, useRef, useState } from 'react'
 
       fetch(`${API_BASE}/auth/me`).then(r => r.json()).then(data => {
         if (data.authenticated && data.user) {
-          setOidcUser(data.user)
-          setAuthMethod('oidc')
-          localStorage.setItem(authMethodKey, 'oidc')
+          if (data.user.authMethod === 'oidc') {
+            setOidcUser(data.user)
+            setAuthMethod('oidc')
+            localStorage.setItem(authMethodKey, 'oidc')
+          } else if (data.user.authMethod === 'basic') {
+            setAuthMethod('basic')
+            localStorage.setItem(authMethodKey, 'basic')
+            if (data.user.name) setLoginAdminUser(data.user.name)
+            if (data.mgmtNode) localStorage.setItem(mgmtNodeKey, data.mgmtNode)
+            setAppMode(AppMode.Management)
+            appModeRef.current = AppMode.Management
+            authenticate().catch(console.error)
+          }
         }
       }).catch(() => {})
     }, [])
@@ -221,12 +230,13 @@ import { useEffect, useRef, useState } from 'react'
       return s === 'on' || s === 'true' || s === '1' || s === 'encrypted'
     }
 
-    const fetchVmrs = async (mgmtNode: string, adminUser: string, adminPass: string): Promise<void> => {
-      const headers = authMethod === 'oidc' ? {} : { 'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}` }
+    const fetchVmrs = async (): Promise<void> => {
+      const mgmtNode = getMgmtNode()
+      if (!mgmtNode) return
       try {
         const [confRes, partRes] = await Promise.all([
-          fetch(`${API_BASE}/bridge`, { headers: { ...headers, 'x-pexip-url': `https://${mgmtNode}/api/admin/status/v1/conference/?limit=500` } }),
-          fetch(`${API_BASE}/bridge`, { headers: { ...headers, 'x-pexip-url': `https://${mgmtNode}/api/admin/status/v1/participant/?limit=500` } })
+          fetch(`${API_BASE}/bridge`, { headers: { 'x-pexip-url': `https://${mgmtNode}/api/admin/status/v1/conference/?limit=500` } }),
+          fetch(`${API_BASE}/bridge`, { headers: { 'x-pexip-url': `https://${mgmtNode}/api/admin/status/v1/participant/?limit=500` } })
         ])
         if (!confRes.ok) return
         const confData = await confRes.json()
@@ -330,10 +340,10 @@ import { useEffect, useRef, useState } from 'react'
       }
     }
 
-    const startPolling = (mgmtNode: string, adminUser: string, adminPass: string): void => {
-      fetchVmrs(mgmtNode, adminUser, adminPass)
+    const startPolling = (): void => {
+      fetchVmrs()
       pollingRef.current = setInterval(() => {
-        fetchVmrs(mgmtNode, adminUser, adminPass)
+        fetchVmrs()
       }, 5000)
     }
 
@@ -346,8 +356,6 @@ import { useEffect, useRef, useState } from 'react'
 
     const fetchQuality = async (confName: string): Promise<ParticipantMediaData[]> => {
       const mgmtNode = getMgmtNode()
-      const adminUser = localStorage.getItem(adminUserKey) ?? ''
-      const adminPass = localStorage.getItem(adminPassKey) ?? ''
       const headers = getAuthHeaders()
       const participants = confParticipantsRef.current[confName] ?? []
       const results = await Promise.all(
@@ -368,9 +376,7 @@ import { useEffect, useRef, useState } from 'react'
     }
 
     const authenticate = async (): Promise<void> => {
-      const mgmtNode = authMethod === 'oidc' ? oidcMgrNode : localStorage.getItem(mgmtNodeKey)
-      const adminUser = localStorage.getItem(adminUserKey) ?? ''
-      const adminPass = localStorage.getItem(adminPassKey) ?? ''
+      const mgmtNode = getMgmtNode()
 
       if (!mgmtNode) {
         if (authMethod === 'oidc') {
@@ -436,7 +442,7 @@ import { useEffect, useRef, useState } from 'react'
           } catch { /* non-fatal */ }
 
           setAppState(AppState.Authenticated)
-          startPolling(mgmtNode, adminUser, adminPass)
+          startPolling()
         } else {
           setError('Invalid credentials or management node unreachable.')
           setAppState(AppState.Error)
@@ -480,10 +486,8 @@ import { useEffect, useRef, useState } from 'react'
     }
 
     const toggleLockVmr = async (vmr: Vmr): Promise<void> => {
-      const mgmtNode = localStorage.getItem(mgmtNodeKey)
-      const adminUser = localStorage.getItem(adminUserKey)
-      const adminPass = localStorage.getItem(adminPassKey)
-      if (mgmtNode == null || adminUser == null || adminPass == null) return
+      const mgmtNode = getMgmtNode()
+      if (!mgmtNode) return
 
       const action = vmr.is_locked ? 'unlock' : 'lock'
       try {
@@ -491,7 +495,6 @@ import { useEffect, useRef, useState } from 'react'
           method: 'POST',
           headers: {
             'x-pexip-url': `https://${mgmtNode}/api/admin/command/v1/conference/${action}/`,
-            'Authorization': `Basic ${btoa(`${adminUser}:${adminPass}`)}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ conference_id: vmr.id })
@@ -640,15 +643,30 @@ import { useEffect, useRef, useState } from 'react'
 
                   <form
                     className="LoginForm"
-                    onSubmit={(e) => {
+                    onSubmit={async (e) => {
                       e.preventDefault()
                       setAuthMethod('basic')
                       localStorage.setItem(authMethodKey, 'basic')
                       localStorage.setItem(mgmtNodeKey, loginMgmtNode.trim())
                       localStorage.setItem(adminUserKey, loginAdminUser.trim())
-                      localStorage.setItem(adminPassKey, loginAdminPass)
                       localStorage.setItem(displayNameKey, loginDisplayName.trim() || 'Conference Assistant')
-                      authenticate().catch(console.error)
+                      setAppState(AppState.Connecting)
+                      try {
+                        const res = await fetch(`${API_BASE}/auth/basic-login`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ mgmtNode: loginMgmtNode.trim(), username: loginAdminUser.trim(), password: loginAdminPass })
+                        })
+                        if (res.ok) {
+                          authenticate().catch(console.error)
+                        } else {
+                          setError('Invalid credentials or management node unreachable.')
+                          setAppState(AppState.Error)
+                        }
+                      } catch {
+                        setError('Could not reach the server.')
+                        setAppState(AppState.Error)
+                      }
                     }}
                   >
                     <div className="LoginForm__field">

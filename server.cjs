@@ -11,6 +11,7 @@ const fs = require('fs');
 const cookieSession = require('cookie-session');
 
 const app = express();
+app.disable('x-powered-by');
 
 const BASE = process.env.BASE_PATH || '/assistant';
 const MTX_HOST = process.env.MTX_HOST || 'localhost';
@@ -30,6 +31,36 @@ function validateBridgeUrl(urlStr) {
   if (h.startsWith('fe80:')) return 'Link-local addresses are blocked';
   return null;
 }
+
+function createRateLimiter(windowMs, maxRequests) {
+  const hits = new Map();
+  const cleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) {
+      if (now - entry.start > windowMs) hits.delete(key);
+    }
+  }, windowMs);
+  if (cleanup.unref) cleanup.unref();
+  return (req, res, next) => {
+    const key = req.ip || 'unknown';
+    const now = Date.now();
+    let entry = hits.get(key);
+    if (!entry || now - entry.start > windowMs) {
+      entry = { start: now, count: 0 };
+      hits.set(key, entry);
+    }
+    entry.count++;
+    if (entry.count > maxRequests) {
+      res.setHeader('Retry-After', Math.ceil((entry.start + windowMs - now) / 1000));
+      return res.status(429).json({ error: 'Too many requests, try again later' });
+    }
+    next();
+  };
+}
+
+const authLimiter = createRateLimiter(60000, 10);
+const bridgeLimiter = createRateLimiter(60000, 200);
+const adminLimiter = createRateLimiter(60000, 10);
 
 // --- Persistent config ---
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -177,6 +208,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; font-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'");
   next();
 });
 
@@ -197,7 +229,7 @@ app.use(cookieSession({
 // --- Admin auth middleware ---
 async function requireAdminAuth(req, res, next) {
   if (!isConfigured()) return next();
-  if (req.session?.user?.authMethod === 'oidc') return next();
+  if (req.session?.user) return next();
 
   const auth = req.headers.authorization;
   if (auth && auth.startsWith('Basic ') && PEXIP_MGR_NODE) {
@@ -238,7 +270,7 @@ app.get(`${BASE}/admin/config`, requireAdminAuth, (req, res) => {
   });
 });
 
-app.post(`${BASE}/admin/config`, requireAdminAuth, async (req, res) => {
+app.post(`${BASE}/admin/config`, adminLimiter, requireAdminAuth, async (req, res) => {
   try {
     const body = req.body;
     const config = {};
@@ -281,7 +313,7 @@ app.post(`${BASE}/admin/config`, requireAdminAuth, async (req, res) => {
   }
 });
 
-app.post(`${BASE}/admin/test-oidc`, requireAdminAuth, async (req, res) => {
+app.post(`${BASE}/admin/test-oidc`, adminLimiter, requireAdminAuth, async (req, res) => {
   const { issuer } = req.body;
   if (!issuer || typeof issuer !== 'string') return res.status(400).json({ error: 'Missing issuer URL' });
   if (!issuer.startsWith('https://')) return res.status(400).json({ error: 'Issuer URL must use HTTPS' });
@@ -307,7 +339,7 @@ app.get(`${BASE}/auth/config`, (req, res) => {
   });
 });
 
-app.get(`${BASE}/auth/login`, async (req, res) => {
+app.get(`${BASE}/auth/login`, authLimiter, async (req, res) => {
   try {
     const config = await getOidcConfig();
     const { verifier, challenge } = generatePKCE();
@@ -338,7 +370,7 @@ app.get(`${BASE}/auth/login`, async (req, res) => {
   }
 });
 
-app.get(`${BASE}/auth/callback`, async (req, res) => {
+app.get(`${BASE}/auth/callback`, authLimiter, async (req, res) => {
   try {
     const { code, state, error, error_description } = req.query;
 
@@ -404,9 +436,30 @@ app.get(`${BASE}/auth/callback`, async (req, res) => {
   }
 });
 
+app.post(`${BASE}/auth/basic-login`, authLimiter, async (req, res) => {
+  const { mgmtNode, username, password } = req.body;
+  if (!mgmtNode || !username || !password) {
+    return res.status(400).json({ error: 'Missing credentials' });
+  }
+  const basicAuth = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+  try {
+    const testRes = await axios.get(
+      `https://${mgmtNode}/api/admin/configuration/v1/licence/`,
+      { headers: { Authorization: basicAuth }, httpsAgent, timeout: 10000 }
+    );
+    if (testRes.status === 200) {
+      req.session.user = { name: username, authMethod: 'basic' };
+      req.session.basicAuth = basicAuth;
+      req.session.mgmtNode = mgmtNode;
+      return res.json({ ok: true });
+    }
+  } catch (e) { /* fall through */ }
+  res.status(401).json({ error: 'Invalid credentials or management node unreachable' });
+});
+
 app.get(`${BASE}/auth/me`, (req, res) => {
   if (req.session.user) {
-    return res.json({ authenticated: true, user: req.session.user });
+    return res.json({ authenticated: true, user: req.session.user, mgmtNode: req.session.mgmtNode || null });
   }
   res.json({ authenticated: false });
 });
@@ -417,7 +470,7 @@ app.post(`${BASE}/auth/logout`, (req, res) => {
 });
 
 // --- Universal Admin API bridge ---
-app.all(`${BASE}/bridge`, async (req, res) => {
+app.all(`${BASE}/bridge`, bridgeLimiter, async (req, res) => {
   const targetUrl = req.headers['x-pexip-url'];
   const pexipToken = req.headers['token'];
   const auth = req.headers['authorization'];
@@ -447,6 +500,8 @@ app.all(`${BASE}/bridge`, async (req, res) => {
       if (bearer) {
         config.headers['Authorization'] = `Bearer ${bearer}`;
       }
+    } else if (req.session.basicAuth) {
+      config.headers['Authorization'] = req.session.basicAuth;
     }
 
     if (pexipToken) config.headers['token'] = pexipToken;

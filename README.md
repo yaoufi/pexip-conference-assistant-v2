@@ -205,13 +205,22 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 - **Error sanitization**: Server-side errors (5xx) return generic messages. Internal details (stack traces, network topology) are never leaked to the client.
 - **OIDC issuer validation**: The test-oidc endpoint requires HTTPS URLs only.
 
+### A04 — Insecure Design
+- **Rate limiting**: In-memory sliding-window rate limiters on all sensitive endpoints:
+  - Auth endpoints (login, callback, basic-login): 10 requests per minute
+  - Bridge proxy: 200 requests per minute
+  - Admin config endpoints: 10 requests per minute
+- **Content Security Policy (CSP)**: Strict CSP header blocks inline scripts, restricts connections to `self`, `https:`, and `wss:` origins only.
+
 ### A05 — Security Misconfiguration
 - **CORS restricted**: Cross-origin requests are disabled (`origin: false`). All API calls are same-origin since the Express server serves both the SPA and the API.
+- **`X-Powered-By` disabled**: Express server fingerprint header removed.
 - **Security headers on all responses**:
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY`
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+  - `Content-Security-Policy` (see A04)
 - **`trust proxy` enabled** for correct protocol detection behind reverse proxies.
 - **Non-root Docker container**: The app runs as the `node` user, not root.
 
@@ -219,6 +228,7 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 - **PKCE** (Proof Key for Code Exchange) on all OIDC authorization requests.
 - **State parameter** validated on callback to prevent CSRF on the login flow.
 - **Nonce** validated to prevent token replay.
+- **Server-side credential storage**: Admin passwords are sent to the server once during login, validated, and stored in the server-side session — never persisted in `localStorage`. Old localStorage password entries are cleaned up on app load.
 
 ### A10 — Server-Side Request Forgery (SSRF)
 - The bridge proxy validates all target URLs before making outbound requests. Only `https://{host}/api/...` patterns are allowed. Internal, loopback, and metadata addresses are rejected.
