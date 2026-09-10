@@ -1,0 +1,11 @@
+# Snyk (https://snyk.io) policy file
+version: v1.25.0
+ignore:
+  SNYK-JS-UUID-8413498:
+    - '@pexip/infinity > uuid':
+        reason: Buffer overrun in uuid v3/v5/v6 when buf argument is provided. Not exploitable — app never passes buf to uuid. Fix requires @pexip/infinity major upgrade (v17→v24).
+        expires: 2027-03-10T00:00:00.000Z
+  GHSA-w5hq-g745-h8pq:
+    - '@pexip/infinity > uuid':
+        reason: Same as above. GitHub advisory alias.
+        expires: 2027-03-10T00:00:00.000Z
