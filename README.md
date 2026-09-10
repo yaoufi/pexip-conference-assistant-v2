@@ -186,4 +186,46 @@ Browser
 - Persists SSO config to `data/config.json` (env vars as fallback)
 - Caches Pexip OAuth2 bearer tokens with auto-refresh
 
-SSL verification is disabled on the server side to support self-signed Pexip certificates.
+---
+
+## Security (OWASP Top 10)
+
+The server includes hardening measures aligned with the [OWASP Top 10 (2021)](https://owasp.org/Top10/):
+
+### A01 — Broken Access Control
+- **Bridge proxy URL validation**: The `/bridge` endpoint only allows HTTPS URLs with `/api/` path prefix. Loopback addresses (`127.x.x.x`, `localhost`), cloud metadata endpoints (`169.254.x.x`), and link-local addresses are blocked.
+- **First-run warning**: When no `config.json` exists, the server logs a security warning that admin endpoints are temporarily unauthenticated.
+
+### A02 — Cryptographic Failures
+- **TLS verification is configurable**: Set `ALLOW_SELF_SIGNED=false` in production with valid certificates. Defaults to `true` for lab environments with self-signed Pexip certs.
+- **Secure cookies**: Set `SECURE_COOKIES=true` when running behind HTTPS to mark session cookies as secure-only.
+- **OIDC nonce verification**: The server validates the `nonce` claim in the ID token against the session-stored value to prevent replay attacks.
+
+### A03 — Injection
+- **Error sanitization**: Server-side errors (5xx) return generic messages. Internal details (stack traces, network topology) are never leaked to the client.
+- **OIDC issuer validation**: The test-oidc endpoint requires HTTPS URLs only.
+
+### A05 — Security Misconfiguration
+- **CORS restricted**: Cross-origin requests are disabled (`origin: false`). All API calls are same-origin since the Express server serves both the SPA and the API.
+- **Security headers on all responses**:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+- **`trust proxy` enabled** for correct protocol detection behind reverse proxies.
+- **Non-root Docker container**: The app runs as the `node` user, not root.
+
+### A07 — Identification and Authentication Failures
+- **PKCE** (Proof Key for Code Exchange) on all OIDC authorization requests.
+- **State parameter** validated on callback to prevent CSRF on the login flow.
+- **Nonce** validated to prevent token replay.
+
+### A10 — Server-Side Request Forgery (SSRF)
+- The bridge proxy validates all target URLs before making outbound requests. Only `https://{host}/api/...` patterns are allowed. Internal, loopback, and metadata addresses are rejected.
+
+### Security environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `ALLOW_SELF_SIGNED` | `true` | Set to `false` to enforce TLS certificate verification |
+| `SECURE_COOKIES` | `false` | Set to `true` when running behind HTTPS |

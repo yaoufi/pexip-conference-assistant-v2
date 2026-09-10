@@ -14,7 +14,22 @@ const app = express();
 
 const BASE = process.env.BASE_PATH || '/assistant';
 const MTX_HOST = process.env.MTX_HOST || 'localhost';
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const ALLOW_SELF_SIGNED = (process.env.ALLOW_SELF_SIGNED || 'true').toLowerCase() === 'true';
+const httpsAgent = new https.Agent({ rejectUnauthorized: !ALLOW_SELF_SIGNED });
+if (ALLOW_SELF_SIGNED) console.warn('[SECURITY] TLS certificate verification disabled (ALLOW_SELF_SIGNED=true). Set to false with valid certs.');
+
+function validateBridgeUrl(urlStr) {
+  let parsed;
+  try { parsed = new URL(urlStr); } catch { return 'Invalid URL'; }
+  if (parsed.protocol !== 'https:') return 'Only HTTPS URLs are allowed';
+  if (!parsed.pathname.startsWith('/api/')) return 'Only Pexip API paths (/api/) are allowed';
+  const h = parsed.hostname.toLowerCase();
+  if (h === 'localhost' || h === '0.0.0.0' || h === '[::1]' || h === '::1') return 'Loopback addresses are blocked';
+  if (/^127\./.test(h)) return 'Loopback addresses are blocked';
+  if (/^169\.254\./.test(h)) return 'Link-local/metadata addresses are blocked';
+  if (h.startsWith('fe80:')) return 'Link-local addresses are blocked';
+  return null;
+}
 
 // --- Persistent config ---
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -73,6 +88,10 @@ function isConfigured() {
 }
 
 loadConfig();
+
+if (!isConfigured()) {
+  console.warn('[SECURITY] No config.json found — admin endpoints are open for initial setup. Complete setup promptly.');
+}
 
 async function getOidcConfig() {
   if (oidcConfig) return oidcConfig;
@@ -147,9 +166,19 @@ function generatePKCE() {
 
 // --- Middleware ---
 app.use(compression());
-app.use(cors());
+app.use(cors({ origin: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: 'application/sdp' }));
+
+app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 
 app.use((req, res, next) => {
   console.log('[REQ]', req.method, req.url);
@@ -162,7 +191,7 @@ app.use(cookieSession({
   maxAge: 8 * 60 * 60 * 1000,
   httpOnly: true,
   sameSite: 'lax',
-  secure: false,
+  secure: process.env.SECURE_COOKIES === 'true',
 }));
 
 // --- Admin auth middleware ---
@@ -248,13 +277,14 @@ app.post(`${BASE}/admin/config`, requireAdminAuth, async (req, res) => {
     res.json({ ok: true, message: 'Configuration saved and applied.' });
   } catch (e) {
     console.error('[ADMIN] Config save error:', e.message);
-    res.status(500).json({ error: 'Failed to save configuration: ' + e.message });
+    res.status(500).json({ error: 'Failed to save configuration. Check server logs for details.' });
   }
 });
 
 app.post(`${BASE}/admin/test-oidc`, requireAdminAuth, async (req, res) => {
   const { issuer } = req.body;
-  if (!issuer) return res.status(400).json({ error: 'Missing issuer URL' });
+  if (!issuer || typeof issuer !== 'string') return res.status(400).json({ error: 'Missing issuer URL' });
+  if (!issuer.startsWith('https://')) return res.status(400).json({ error: 'Issuer URL must use HTTPS' });
   try {
     const discoveryRes = await axios.get(`${issuer}/.well-known/openid-configuration`, { httpsAgent, timeout: 10000 });
     res.json({ ok: true, endpoints: {
@@ -263,7 +293,7 @@ app.post(`${BASE}/admin/test-oidc`, requireAdminAuth, async (req, res) => {
       issuer: discoveryRes.data.issuer,
     }});
   } catch (e) {
-    res.status(400).json({ error: 'Could not reach OIDC discovery endpoint: ' + e.message });
+    res.status(400).json({ error: 'Could not reach OIDC discovery endpoint. Verify the issuer URL is correct and reachable.' });
   }
 });
 
@@ -350,6 +380,10 @@ app.get(`${BASE}/auth/callback`, async (req, res) => {
       audience: OIDC_CLIENT_ID,
     });
 
+    if (req.session.oauth_nonce && payload.nonce !== req.session.oauth_nonce) {
+      return res.redirect(`${BASE}/?auth_error=nonce_mismatch`);
+    }
+
     req.session.pkce_verifier = null;
     req.session.oauth_state = null;
     req.session.oauth_nonce = null;
@@ -388,7 +422,9 @@ app.all(`${BASE}/bridge`, async (req, res) => {
   const pexipToken = req.headers['token'];
   const auth = req.headers['authorization'];
 
-  if (!targetUrl) return res.status(400).send('Missing target URL in headers.');
+  if (!targetUrl) return res.status(400).json({ error: 'Missing target URL in headers' });
+  const urlError = validateBridgeUrl(targetUrl);
+  if (urlError) return res.status(403).json({ error: urlError });
 
   try {
     const config = {
@@ -419,7 +455,12 @@ app.all(`${BASE}/bridge`, async (req, res) => {
     res.json(response.data);
   } catch (error) {
     console.error('Bridge Error:', error.message);
-    res.status(error.response?.status || 500).json(error.response?.data || error.message);
+    const status = error.response?.status || 500;
+    if (status >= 500) {
+      res.status(status).json({ error: 'Bridge proxy error' });
+    } else {
+      res.status(status).json(error.response?.data || { error: 'Request failed' });
+    }
   }
 });
 
