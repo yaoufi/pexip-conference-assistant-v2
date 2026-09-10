@@ -18,7 +18,6 @@ export default defineConfig({
     }
   },
   build: {
-    target: 'esnext',
-    cssTarget: 'chrome100'
+    target: 'ES2022'
   }
 })
