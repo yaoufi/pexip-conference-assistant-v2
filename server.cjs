@@ -51,6 +51,7 @@ function createRateLimiter(windowMs, maxRequests) {
     }
     entry.count++;
     if (entry.count > maxRequests) {
+      secLog('rate_limit', { ip: key, path: req.path, count: entry.count });
       res.setHeader('Retry-After', Math.ceil((entry.start + windowMs - now) / 1000));
       return res.status(429).json({ error: 'Too many requests, try again later' });
     }
@@ -58,9 +59,14 @@ function createRateLimiter(windowMs, maxRequests) {
   };
 }
 
+function secLog(event, details) {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), event, ...details }));
+}
+
 const authLimiter = createRateLimiter(60000, 10);
 const bridgeLimiter = createRateLimiter(60000, 200);
 const adminLimiter = createRateLimiter(60000, 10);
+const mediaLimiter = createRateLimiter(60000, 300);
 
 // --- Persistent config ---
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -208,7 +214,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; font-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; font-src 'self' data:; media-src 'self' blob:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'");
   next();
 });
 
@@ -428,7 +434,7 @@ app.get(`${BASE}/auth/callback`, authLimiter, async (req, res) => {
       authMethod: 'oidc',
     };
 
-    console.log('[AUTH] OIDC login:', req.session.user.email);
+    secLog('auth_success', { method: 'oidc', user: req.session.user.email, ip: req.ip });
     res.redirect(`${BASE}/`);
   } catch (e) {
     console.error('[AUTH] Callback error:', e.message);
@@ -441,19 +447,27 @@ app.post(`${BASE}/auth/basic-login`, authLimiter, async (req, res) => {
   if (!mgmtNode || !username || !password) {
     return res.status(400).json({ error: 'Missing credentials' });
   }
+  const loginUrl = `https://${mgmtNode}/api/admin/configuration/v1/licence/`;
+  const urlError = validateBridgeUrl(loginUrl);
+  if (urlError) {
+    console.warn(`[SECURITY] basic-login SSRF blocked: ${mgmtNode} — ${urlError} (IP: ${req.ip})`);
+    return res.status(400).json({ error: 'Invalid management node address' });
+  }
   const basicAuth = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
   try {
     const testRes = await axios.get(
-      `https://${mgmtNode}/api/admin/configuration/v1/licence/`,
+      loginUrl,
       { headers: { Authorization: basicAuth }, httpsAgent, timeout: 10000 }
     );
     if (testRes.status === 200) {
       req.session.user = { name: username, authMethod: 'basic' };
       req.session.basicAuth = basicAuth;
       req.session.mgmtNode = mgmtNode;
+      secLog('auth_success', { method: 'basic', user: username, mgmtNode, ip: req.ip });
       return res.json({ ok: true });
     }
   } catch (e) { /* fall through */ }
+  secLog('auth_failure', { method: 'basic', user: username, mgmtNode, ip: req.ip });
   res.status(401).json({ error: 'Invalid credentials or management node unreachable' });
 });
 
@@ -477,7 +491,10 @@ app.all(`${BASE}/bridge`, bridgeLimiter, async (req, res) => {
 
   if (!targetUrl) return res.status(400).json({ error: 'Missing target URL in headers' });
   const urlError = validateBridgeUrl(targetUrl);
-  if (urlError) return res.status(403).json({ error: urlError });
+  if (urlError) {
+    secLog('ssrf_blocked', { url: targetUrl, reason: urlError, ip: req.ip });
+    return res.status(403).json({ error: urlError });
+  }
 
   try {
     const config = {
@@ -520,7 +537,7 @@ app.all(`${BASE}/bridge`, bridgeLimiter, async (req, res) => {
 });
 
 // --- MediaMTX API proxy ---
-app.all(`${BASE}/mtx/{*path}`, async (req, res) => {
+app.all(`${BASE}/mtx/{*path}`, mediaLimiter, async (req, res) => {
   const mtxPath = '/' + (req.params.path || '');
   try {
     const response = await axios({
@@ -537,7 +554,7 @@ app.all(`${BASE}/mtx/{*path}`, async (req, res) => {
 });
 
 // --- WHEP proxy ---
-app.post(`${BASE}/whep/{*path}`, async (req, res) => {
+app.post(`${BASE}/whep/{*path}`, mediaLimiter, async (req, res) => {
   const whepPath = req.url.replace(`${BASE}/whep`, '');
   const targetUrl = `http://${MTX_HOST}:8889${whepPath}`;
   try {
@@ -557,7 +574,7 @@ app.post(`${BASE}/whep/{*path}`, async (req, res) => {
 });
 
 // --- HLS proxy ---
-app.get(`${BASE}/hls/{*path}`, (req, res) => {
+app.get(`${BASE}/hls/{*path}`, mediaLimiter, (req, res) => {
   const hlsPath = '/' + (req.params.path || '');
   const proxyReq = http.request({
     hostname: MTX_HOST,
@@ -566,7 +583,7 @@ app.get(`${BASE}/hls/{*path}`, (req, res) => {
     method: 'GET'
   }, (proxyRes) => {
     const headers = { ...proxyRes.headers };
-    headers['access-control-allow-origin'] = '*';
+    delete headers['access-control-allow-origin'];
     res.writeHead(proxyRes.statusCode, headers);
     proxyRes.pipe(res);
   });

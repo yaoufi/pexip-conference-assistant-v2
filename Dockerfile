@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install dependencies for both React and the Bridge
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 RUN npm install --legacy-peer-deps express axios cors compression
 RUN cp node_modules/@pexip/components/dist/components.css node_modules/@pexip/components/dist/style.css 2>/dev/null || true
 

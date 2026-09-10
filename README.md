@@ -206,11 +206,12 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 - **OIDC issuer validation**: The test-oidc endpoint requires HTTPS URLs only.
 
 ### A04 — Insecure Design
-- **Rate limiting**: In-memory sliding-window rate limiters on all sensitive endpoints:
+- **Rate limiting**: In-memory sliding-window rate limiters on all endpoints:
   - Auth endpoints (login, callback, basic-login): 10 requests per minute
   - Bridge proxy: 200 requests per minute
   - Admin config endpoints: 10 requests per minute
-- **Content Security Policy (CSP)**: Strict CSP header blocks inline scripts, restricts connections to `self`, `https:`, and `wss:` origins only.
+  - Media proxies (MTX, WHEP, HLS): 300 requests per minute
+- **Content Security Policy (CSP)**: Strict CSP header blocks inline scripts, restricts connections to `self`, `https:`, and `wss:` origins. Iframes allowed from `self` and `https:` origins (required for Pexip conference previews).
 
 ### A05 — Security Misconfiguration
 - **CORS restricted**: Cross-origin requests are disabled (`origin: false`). All API calls are same-origin since the Express server serves both the SPA and the API.
@@ -230,8 +231,17 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 - **Nonce** validated to prevent token replay.
 - **Server-side credential storage**: Admin passwords are sent to the server once during login, validated, and stored in the server-side session — never persisted in `localStorage`. Old localStorage password entries are cleaned up on app load.
 
+### A08 — Software and Data Integrity Failures
+- **Lockfile verification**: Docker builds use `npm ci` instead of `npm install` to verify `package-lock.json` integrity and ensure reproducible installs.
+
+### A09 — Security Logging and Monitoring Failures
+- **Structured security event logging**: All security-relevant events are logged as JSON with timestamps and client IP:
+  - `auth_success` / `auth_failure` — login attempts with method, user, and IP
+  - `ssrf_blocked` — rejected bridge/login URLs with reason
+  - `rate_limit` — rate limiter activations with path and request count
+
 ### A10 — Server-Side Request Forgery (SSRF)
-- The bridge proxy validates all target URLs before making outbound requests. Only `https://{host}/api/...` patterns are allowed. Internal, loopback, and metadata addresses are rejected.
+- The bridge proxy and basic-login endpoint validate all target URLs before making outbound requests. Only `https://{host}/api/...` patterns are allowed. Internal, loopback, and metadata addresses are rejected.
 
 ### Security environment variables
 
