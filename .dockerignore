@@ -1,6 +1,10 @@
 node_modules
 dist
 .git
+.env
+data/
+*.pem
+*.key
 **/* - Copy.tsx
 **/* - Good.tsx
 **/* - original.tsx

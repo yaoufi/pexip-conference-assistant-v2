@@ -389,6 +389,10 @@ app.get(`${BASE}/auth/callback`, authLimiter, async (req, res) => {
       return res.redirect(`${BASE}/?auth_error=state_mismatch`);
     }
 
+    if (!code) {
+      return res.redirect(`${BASE}/?auth_error=missing_authorization_code`);
+    }
+
     const config = await getOidcConfig();
     const redirectUri = OIDC_REDIRECT_URI || `${req.protocol}://${req.get('host')}${BASE}/auth/callback`;
 
@@ -580,7 +584,8 @@ app.get(`${BASE}/hls/{*path}`, mediaLimiter, (req, res) => {
     hostname: MTX_HOST,
     port: 8888,
     path: hlsPath,
-    method: 'GET'
+    method: 'GET',
+    timeout: 10000,
   }, (proxyRes) => {
     const headers = { ...proxyRes.headers };
     delete headers['access-control-allow-origin'];
@@ -588,6 +593,7 @@ app.get(`${BASE}/hls/{*path}`, mediaLimiter, (req, res) => {
     proxyRes.pipe(res);
   });
   proxyReq.on('error', () => res.status(502).send('HLS proxy error'));
+  proxyReq.on('timeout', () => { proxyReq.destroy(); res.status(504).send('HLS proxy timeout'); });
   proxyReq.end();
 });
 
@@ -596,6 +602,23 @@ const distPath = path.join(__dirname, 'dist');
 app.use(BASE, express.static(distPath));
 app.get(`${BASE}/{*path}`, (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// --- Global error handler (A10: Mishandling of Exceptional Conditions) ---
+app.use((err, req, res, _next) => {
+  secLog('unhandled_error', { path: req.path, method: req.method, ip: req.ip, error: err.message });
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+process.on('uncaughtException', (err) => {
+  secLog('uncaught_exception', { error: err.message, stack: err.stack });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  secLog('unhandled_rejection', { error: String(reason) });
 });
 
 const PORT = process.env.PORT ?? 3001;

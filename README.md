@@ -231,16 +231,30 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 - **Nonce** validated to prevent token replay.
 - **Server-side credential storage**: Admin passwords are sent to the server once during login, validated, and stored in the server-side session — never persisted in `localStorage`. Old localStorage password entries are cleaned up on app load.
 
+### A03 — Software Supply Chain Failures (OWASP 2025)
+- **Pinned Docker base image**: `node:18-alpine` is pinned to a specific SHA256 digest to prevent supply chain attacks via tag mutation.
+- **Lockfile verification**: Docker builds use `npm ci` to verify `package-lock.json` integrity and ensure reproducible installs.
+- **`.dockerignore` hardened**: Excludes `data/`, `.env`, `*.pem`, and `*.key` from the Docker build context to prevent accidental inclusion of secrets.
+- **Dependencies audited**: `npm audit fix` applied; remaining moderate vulnerabilities require breaking upgrades and are deferred.
+
 ### A08 — Software and Data Integrity Failures
 - **Lockfile verification**: Docker builds use `npm ci` instead of `npm install` to verify `package-lock.json` integrity and ensure reproducible installs.
 
-### A09 — Security Logging and Monitoring Failures
+### A09 — Security Logging and Alerting Failures
 - **Structured security event logging**: All security-relevant events are logged as JSON with timestamps and client IP:
   - `auth_success` / `auth_failure` — login attempts with method, user, and IP
   - `ssrf_blocked` — rejected bridge/login URLs with reason
   - `rate_limit` — rate limiter activations with path and request count
+  - `unhandled_error` / `uncaught_exception` / `unhandled_rejection` — unexpected errors with context
 
-### A10 — Server-Side Request Forgery (SSRF)
+### A10 — Mishandling of Exceptional Conditions (OWASP 2025)
+- **Global Express error handler**: Catches unhandled route errors, returns generic 500 response, and logs the event.
+- **Process-level handlers**: `uncaughtException` and `unhandledRejection` are caught, logged, and handled gracefully.
+- **HLS proxy timeout**: 10-second timeout prevents indefinite resource consumption from hung upstream connections.
+- **OIDC parameter validation**: Missing `code` parameter in OAuth callback is detected and handled instead of passing `undefined` to the token exchange.
+- **React ErrorBoundary**: Wraps the entire app to catch unexpected render errors and display a recovery UI instead of a white screen.
+
+### SSRF Protection
 - The bridge proxy and basic-login endpoint validate all target URLs before making outbound requests. Only `https://{host}/api/...` patterns are allowed. Internal, loopback, and metadata addresses are rejected.
 
 ### Security environment variables

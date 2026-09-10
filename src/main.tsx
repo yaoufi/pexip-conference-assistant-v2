@@ -6,11 +6,14 @@ import '@pexip/components/src/fonts.css'
 import '@pexip/components/dist/style.css'
 import '@pexip/components/dist/components.css'
 import { App } from './App'
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
 
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root') as Element).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 )

@@ -1,14 +1,11 @@
-FROM node:18-alpine
+FROM node:18-alpine@sha256:929b04d7c782f04f615cf785488fed452b6569f87c73ff666ad553a7554f0006
 
 WORKDIR /app
 
-# Install dependencies for both React and the Bridge
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
-RUN npm install --legacy-peer-deps express axios cors compression
 RUN cp node_modules/@pexip/components/dist/components.css node_modules/@pexip/components/dist/style.css 2>/dev/null || true
 
-# Copy code and build the React app
 COPY . .
 ARG BASE_PATH=/assistant
 RUN VITE_BASE=${BASE_PATH}/ npx vite build
@@ -16,7 +13,6 @@ RUN mkdir -p /app/data && chown -R node:node /app
 
 USER node
 
-# The command to run our bridge
 ENV PORT=3001
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
