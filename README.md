@@ -257,9 +257,23 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 ### SSRF Protection
 - The bridge proxy and basic-login endpoint validate all target URLs before making outbound requests. Only `https://{host}/api/...` patterns are allowed. Internal, loopback, and metadata addresses are rejected.
 
+### Secure Code Best Practices
+- **HSTS**: `Strict-Transport-Security` header enforces HTTPS for all future browser requests.
+- **Timing-safe comparison**: OIDC state and nonce are compared using `crypto.timingSafeEqual` to prevent timing side-channel attacks.
+- **Path traversal protection**: All media proxy routes (MTX, WHEP, HLS) reject paths containing `..`.
+- **Error sanitization**: Bridge proxy errors return generic messages — upstream details, stack traces, and network topology are never leaked.
+- **Session rotation**: Server-side session is destroyed and recreated after successful OIDC and basic auth login to prevent session fixation.
+- **Autocomplete disabled**: Password and secret fields have `autoComplete="off"` to prevent browser credential caching.
+- **Input length validation**: Admin config POST rejects any field exceeding 2048 characters (except private key PEM).
+- **Secure cookies by default**: Session cookies are marked `Secure` by default; set `SECURE_COOKIES=false` only for HTTP dev environments.
+- **React ErrorBoundary**: Wraps the entire app to catch render crashes and display a recovery UI.
+
+### CI Pipeline
+- **GitHub Actions** (`security.yml`): Runs `npm audit` on every push/PR to master and weekly. Fails the build on critical vulnerabilities.
+
 ### Security environment variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `ALLOW_SELF_SIGNED` | `true` | Set to `false` to enforce TLS certificate verification |
-| `SECURE_COOKIES` | `false` | Set to `true` when running behind HTTPS |
+| `SECURE_COOKIES` | `true` | Set to `false` only for HTTP dev environments |

@@ -214,6 +214,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; font-src 'self' data:; media-src 'self' blob:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'");
   next();
 });
@@ -229,7 +230,7 @@ app.use(cookieSession({
   maxAge: 8 * 60 * 60 * 1000,
   httpOnly: true,
   sameSite: 'lax',
-  secure: process.env.SECURE_COOKIES === 'true',
+  secure: process.env.SECURE_COOKIES !== 'false',
 }));
 
 // --- Admin auth middleware ---
@@ -279,6 +280,12 @@ app.get(`${BASE}/admin/config`, requireAdminAuth, (req, res) => {
 app.post(`${BASE}/admin/config`, adminLimiter, requireAdminAuth, async (req, res) => {
   try {
     const body = req.body;
+    const MAX_FIELD_LEN = 2048;
+    for (const [k, v] of Object.entries(body)) {
+      if (typeof v === 'string' && v.length > MAX_FIELD_LEN && k !== 'privateKeyPem') {
+        return res.status(400).json({ error: `Field "${k}" exceeds maximum length` });
+      }
+    }
     const config = {};
 
     if (body.oidcIssuer !== undefined) config.oidcIssuer = body.oidcIssuer;
@@ -385,7 +392,7 @@ app.get(`${BASE}/auth/callback`, authLimiter, async (req, res) => {
       return res.redirect(`${BASE}/?auth_error=${encodeURIComponent(error_description || error)}`);
     }
 
-    if (state !== req.session.oauth_state) {
+    if (!state || !req.session.oauth_state || !crypto.timingSafeEqual(Buffer.from(state), Buffer.from(req.session.oauth_state))) {
       return res.redirect(`${BASE}/?auth_error=state_mismatch`);
     }
 
@@ -422,21 +429,20 @@ app.get(`${BASE}/auth/callback`, authLimiter, async (req, res) => {
       audience: OIDC_CLIENT_ID,
     });
 
-    if (req.session.oauth_nonce && payload.nonce !== req.session.oauth_nonce) {
+    if (req.session.oauth_nonce && (!payload.nonce || !crypto.timingSafeEqual(Buffer.from(payload.nonce), Buffer.from(req.session.oauth_nonce)))) {
       return res.redirect(`${BASE}/?auth_error=nonce_mismatch`);
     }
 
-    req.session.pkce_verifier = null;
-    req.session.oauth_state = null;
-    req.session.oauth_nonce = null;
-
-    req.session.user = {
+    const userData = {
       sub: payload.sub,
       name: payload.name || payload.preferred_username || payload.email,
       email: payload.email,
       groups: payload.groups || [],
       authMethod: 'oidc',
     };
+    req.session = null;
+    req.session = {};
+    req.session.user = userData;
 
     secLog('auth_success', { method: 'oidc', user: req.session.user.email, ip: req.ip });
     res.redirect(`${BASE}/`);
@@ -464,9 +470,10 @@ app.post(`${BASE}/auth/basic-login`, authLimiter, async (req, res) => {
       { headers: { Authorization: basicAuth }, httpsAgent, timeout: 10000 }
     );
     if (testRes.status === 200) {
-      req.session.user = { name: username, authMethod: 'basic' };
-      req.session.basicAuth = basicAuth;
-      req.session.mgmtNode = mgmtNode;
+      const sessionData = { user: { name: username, authMethod: 'basic' }, basicAuth, mgmtNode };
+      req.session = null;
+      req.session = {};
+      Object.assign(req.session, sessionData);
       secLog('auth_success', { method: 'basic', user: username, mgmtNode, ip: req.ip });
       return res.json({ ok: true });
     }
@@ -532,17 +539,14 @@ app.all(`${BASE}/bridge`, bridgeLimiter, async (req, res) => {
   } catch (error) {
     console.error('Bridge Error:', error.message);
     const status = error.response?.status || 500;
-    if (status >= 500) {
-      res.status(status).json({ error: 'Bridge proxy error' });
-    } else {
-      res.status(status).json(error.response?.data || { error: 'Request failed' });
-    }
+    res.status(status).json({ error: status >= 500 ? 'Bridge proxy error' : 'Request failed' });
   }
 });
 
 // --- MediaMTX API proxy ---
 app.all(`${BASE}/mtx/{*path}`, mediaLimiter, async (req, res) => {
   const mtxPath = '/' + (req.params.path || '');
+  if (mtxPath.includes('..')) return res.status(400).json({ error: 'Invalid path' });
   try {
     const response = await axios({
       method: req.method,
@@ -560,6 +564,7 @@ app.all(`${BASE}/mtx/{*path}`, mediaLimiter, async (req, res) => {
 // --- WHEP proxy ---
 app.post(`${BASE}/whep/{*path}`, mediaLimiter, async (req, res) => {
   const whepPath = req.url.replace(`${BASE}/whep`, '');
+  if (whepPath.includes('..')) return res.status(400).send('Invalid path');
   const targetUrl = `http://${MTX_HOST}:8889${whepPath}`;
   try {
     const response = await axios.post(targetUrl, req.body, {
@@ -580,6 +585,7 @@ app.post(`${BASE}/whep/{*path}`, mediaLimiter, async (req, res) => {
 // --- HLS proxy ---
 app.get(`${BASE}/hls/{*path}`, mediaLimiter, (req, res) => {
   const hlsPath = '/' + (req.params.path || '');
+  if (hlsPath.includes('..')) return res.status(400).send('Invalid path');
   const proxyReq = http.request({
     hostname: MTX_HOST,
     port: 8888,

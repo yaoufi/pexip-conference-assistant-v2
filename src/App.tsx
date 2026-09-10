@@ -698,6 +698,7 @@ import { useEffect, useRef, useState } from 'react'
                         type="password"
                         placeholder="Admin password"
                         required
+                        autoComplete="off"
                         value={loginAdminPass}
                         onChange={(e) => setLoginAdminPass(e.target.value)}
                       />
@@ -778,6 +779,7 @@ import { useEffect, useRef, useState } from 'react'
                         className="LoginForm__input"
                         type="password"
                         placeholder="Leave blank if no PIN"
+                        autoComplete="off"
                         value={directPin}
                         onChange={(e) => setDirectPin(e.target.value)}
                       />

@@ -195,6 +195,7 @@ export const SetupPage = ({ isFirstRun, onConfigSaved, onClose, authHeaders }: S
               <label>Client Secret</label>
               <input
                 type="password"
+                autoComplete="off"
                 placeholder={form.oidcClientSecret === '********' ? '(unchanged)' : 'Client secret'}
                 value={form.oidcClientSecret}
                 onChange={e => update('oidcClientSecret', e.target.value)}
