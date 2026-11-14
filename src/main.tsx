@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 // Import fonts
 import '@pexip/components/src/fonts.css'
 // Import other global styles
-import '@pexip/components/dist/style.css'
 import '@pexip/components/dist/components.css'
 import { App } from './App'
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'

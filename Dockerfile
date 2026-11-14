@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
-RUN cp node_modules/@pexip/components/dist/components.css node_modules/@pexip/components/dist/style.css 2>/dev/null || true
 
 COPY . .
 ARG BASE_PATH=/assistant
