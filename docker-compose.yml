@@ -1,12 +1,14 @@
-version: '3.8'
-
 services:
-  pexip-assistant-v2:
-    build: .
-    container_name: pexip-assistant-v2-app
+  pexip-assistant:
+    build:
+      context: .
+      args:
+        BASE_PATH: /assistant
+    container_name: pexip-assistant-app
     ports:
       - "127.0.0.1:3002:3001"
     environment:
+      - BASE_PATH=/assistant
       - MTX_HOST=mediamtx
     depends_on:
       - mediamtx
