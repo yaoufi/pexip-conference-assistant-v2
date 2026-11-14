@@ -12,9 +12,7 @@ export default defineConfig({
     proxy: {
       '/assistant/bridge': { target: 'http://localhost:3001', changeOrigin: true },
       '/assistant/auth': { target: 'http://localhost:3001', changeOrigin: true },
-      '/assistant/admin': { target: 'http://localhost:3001', changeOrigin: true },
-      '/assistant/mtx': { target: 'http://localhost:9997', changeOrigin: true, rewrite: (p) => p.replace('/assistant/mtx', '') },
-      '/assistant/hls': { target: 'http://localhost:8888', changeOrigin: true, rewrite: (p) => p.replace('/assistant/hls', '') }
+      '/assistant/admin': { target: 'http://localhost:3001', changeOrigin: true }
     }
   },
   build: {

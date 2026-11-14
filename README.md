@@ -105,6 +105,14 @@ To run in the background:
 docker-compose up -d --build
 ```
 
+### Persistent configuration
+
+The setup page saves `config.json` and `oauth2_private_key.pem` to `./data`, which is mounted into the container so rebuilds keep the configuration. The container runs as uid 1000 (`node`), so the host folder must be writable by that user:
+
+```bash
+mkdir -p data && sudo chown 1000:1000 data && chmod 700 data
+```
+
 ### Custom base path
 
 To deploy at a different URL path (e.g. `/assistantv2/`), set `BASE_PATH` as both a build arg and runtime env var:
@@ -210,7 +218,6 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
   - Auth endpoints (login, callback, basic-login): 10 requests per minute
   - Bridge proxy: 200 requests per minute
   - Admin config endpoints: 10 requests per minute
-  - Media proxies (MTX, WHEP, HLS): 300 requests per minute
 - **Content Security Policy (CSP)**: Strict CSP header blocks inline scripts, restricts connections to `self`, `https:`, and `wss:` origins. Iframes allowed from `self` and `https:` origins (required for Pexip conference previews).
 
 ### A05 — Security Misconfiguration
@@ -250,7 +257,6 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 ### A10 — Mishandling of Exceptional Conditions (OWASP 2025)
 - **Global Express error handler**: Catches unhandled route errors, returns generic 500 response, and logs the event.
 - **Process-level handlers**: `uncaughtException` and `unhandledRejection` are caught, logged, and handled gracefully.
-- **HLS proxy timeout**: 10-second timeout prevents indefinite resource consumption from hung upstream connections.
 - **OIDC parameter validation**: Missing `code` parameter in OAuth callback is detected and handled instead of passing `undefined` to the token exchange.
 - **React ErrorBoundary**: Wraps the entire app to catch unexpected render errors and display a recovery UI instead of a white screen.
 
@@ -260,7 +266,6 @@ The server includes hardening measures aligned with the [OWASP Top 10 (2021)](ht
 ### Secure Code Best Practices
 - **HSTS**: `Strict-Transport-Security` header enforces HTTPS for all future browser requests.
 - **Timing-safe comparison**: OIDC state and nonce are compared using `crypto.timingSafeEqual` to prevent timing side-channel attacks.
-- **Path traversal protection**: All media proxy routes (MTX, WHEP, HLS) reject paths containing `..`.
 - **Error sanitization**: Bridge proxy errors return generic messages — upstream details, stack traces, and network topology are never leaked.
 - **Session rotation**: Server-side session is destroyed and recreated after successful OIDC and basic auth login to prevent session fixation.
 - **Autocomplete disabled**: Password and secret fields have `autoComplete="off"` to prevent browser credential caching.

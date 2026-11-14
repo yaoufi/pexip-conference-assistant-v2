@@ -3,7 +3,6 @@ const compression = require('compression');
 const cors = require('cors');
 const axios = require('axios');
 const https = require('https');
-const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
 if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
@@ -14,7 +13,6 @@ const app = express();
 app.disable('x-powered-by');
 
 const BASE = process.env.BASE_PATH || '/assistant';
-const MTX_HOST = process.env.MTX_HOST || 'localhost';
 const ALLOW_SELF_SIGNED = (process.env.ALLOW_SELF_SIGNED || 'true').toLowerCase() === 'true';
 const httpsAgent = new https.Agent({ rejectUnauthorized: !ALLOW_SELF_SIGNED });
 if (ALLOW_SELF_SIGNED) console.warn('[SECURITY] TLS certificate verification disabled (ALLOW_SELF_SIGNED=true). Set to false with valid certs.');
@@ -66,7 +64,6 @@ function secLog(event, details) {
 const authLimiter = createRateLimiter(60000, 10);
 const bridgeLimiter = createRateLimiter(60000, 200);
 const adminLimiter = createRateLimiter(60000, 10);
-const mediaLimiter = createRateLimiter(60000, 300);
 
 // --- Persistent config ---
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -541,66 +538,6 @@ app.all(`${BASE}/bridge`, bridgeLimiter, async (req, res) => {
     const status = error.response?.status || 500;
     res.status(status).json({ error: status >= 500 ? 'Bridge proxy error' : 'Request failed' });
   }
-});
-
-// --- MediaMTX API proxy ---
-app.all(`${BASE}/mtx/{*path}`, mediaLimiter, async (req, res) => {
-  const mtxPath = '/' + (req.params.path || '');
-  if (mtxPath.includes('..')) return res.status(400).json({ error: 'Invalid path' });
-  try {
-    const response = await axios({
-      method: req.method,
-      url: `http://${MTX_HOST}:9997${mtxPath}`,
-      data: req.body,
-      timeout: 5000,
-      headers: { 'Content-Type': 'application/json' }
-    });
-    res.json(response.data);
-  } catch (error) {
-    res.status(error.response?.status || 502).json(error.response?.data || { error: 'MediaMTX unreachable' });
-  }
-});
-
-// --- WHEP proxy ---
-app.post(`${BASE}/whep/{*path}`, mediaLimiter, async (req, res) => {
-  const whepPath = req.url.replace(`${BASE}/whep`, '');
-  if (whepPath.includes('..')) return res.status(400).send('Invalid path');
-  const targetUrl = `http://${MTX_HOST}:8889${whepPath}`;
-  try {
-    const response = await axios.post(targetUrl, req.body, {
-      headers: { 'Content-Type': 'application/sdp' },
-      responseType: 'text',
-      timeout: 10000,
-      transformRequest: [(data) => data],
-      transformResponse: [(data) => data]
-    });
-    res.set('Content-Type', 'application/sdp');
-    res.set('Location', response.headers.location || '');
-    res.status(response.status).send(response.data);
-  } catch (e) {
-    res.status(e.response?.status || 502).send(e.response?.data || 'WHEP proxy error');
-  }
-});
-
-// --- HLS proxy ---
-app.get(`${BASE}/hls/{*path}`, mediaLimiter, (req, res) => {
-  const hlsPath = '/' + (req.params.path || '');
-  if (hlsPath.includes('..')) return res.status(400).send('Invalid path');
-  const proxyReq = http.request({
-    hostname: MTX_HOST,
-    port: 8888,
-    path: hlsPath,
-    method: 'GET',
-    timeout: 10000,
-  }, (proxyRes) => {
-    const headers = { ...proxyRes.headers };
-    delete headers['access-control-allow-origin'];
-    res.writeHead(proxyRes.statusCode, headers);
-    proxyRes.pipe(res);
-  });
-  proxyReq.on('error', () => res.status(502).send('HLS proxy error'));
-  proxyReq.on('timeout', () => { proxyReq.destroy(); res.status(504).send('HLS proxy timeout'); });
-  proxyReq.end();
 });
 
 // --- Serve React static build ---

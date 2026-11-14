@@ -9,23 +9,10 @@ services:
       - "127.0.0.1:3002:3001"
     environment:
       - BASE_PATH=/assistant
-      - MTX_HOST=mediamtx
-    depends_on:
-      - mediamtx
-    restart: always
-    mem_limit: 512m
-    cpus: '1.0'
-
-  mediamtx:
-    image: bluenviron/mediamtx:latest
-    container_name: mediamtx
-    ports:
-      - "1935:1935"
-      - "8888:8888"
-      - "8889:8889"
-      - "8189:8189/udp"
     volumes:
-      - ./mediamtx.yml:/mediamtx.yml
+      # Setup GUI writes config.json + oauth2_private_key.pem here; keep it outside
+      # the image so rebuilds don't wipe the configuration. Must be owned by uid 1000.
+      - ./data:/app/data
     restart: always
     mem_limit: 512m
     cpus: '1.0'
